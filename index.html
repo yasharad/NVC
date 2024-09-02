@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NVC Case Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f9;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            text-align: center;
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 100%;
+            width: 400px;
+            position: relative;
+        }
+        input[type="text"], select {
+            padding: 10px;
+            width: 100%;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px 20px;
+            color: #fff;
+            background-color: #007bff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .response {
+            margin-top: 20px;
+            text-align: left;
+            max-height: 300px;
+            overflow-y: auto;
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            position: relative;
+        }
+        .response .item {
+            margin: 5px 0;
+            padding: 10px;
+            border-radius: 4px;
+            background: #e9ecef;
+        }
+        .response .item h4 {
+            margin: 0;
+            font-size: 16px;
+            color: #333;
+        }
+        .loading-hud {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.8);
+            z-index: 10;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            color: #333;
+        }
+        .loading-hud.active {
+            display: flex;
+        }
+        .error-message {
+            color: red;
+            margin-top: 10px;
+        }
+        @media (max-width: 480px) {
+            .container {
+                padding: 20px;
+            }
+            button {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Enter Your Case Number</h2>
+        <input type="text" id="caseNumber" placeholder="Enter Case Number">
+        <select id="caseHistory" onchange="selectFromHistory()">
+            <option value="">Select from history</option>
+        </select>
+        <button onclick="makeRequest()">Submit</button>
+        <div class="response" id="response"></div>
+        <div class="loading-hud" id="loadingHud">Loading...</div>
+        <div class="error-message" id="errorMessage"></div>
+        <div class="footer">Developed by Yas👨‍💻</div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', loadHistory);
+
+        function makeRequest() {
+            const caseNumber = document.getElementById('caseNumber').value.trim();
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = ''; // Clear previous error message
+            
+            if (!caseNumber) {
+                errorMessage.textContent = 'Case Number is required!';
+                return; // Stop execution if the input is empty
+            }
+
+            const url = `http://localhost:3000/proxy?caseNumber=${caseNumber}`;
+
+            const loadingHud = document.getElementById('loadingHud');
+            loadingHud.classList.add('active'); // Show the loading HUD
+
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const responseContainer = document.getElementById('response');
+                    responseContainer.innerHTML = ''; // Clear previous content
+                    responseContainer.appendChild(formatData(data)); // Format data nicely
+                    addToHistory(caseNumber); // Add to history
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                    document.getElementById('response').textContent = 'Error: ' + error.message;
+                })
+                .finally(() => {
+                    loadingHud.classList.remove('active'); // Hide the loading HUD
+                });
+        }
+
+        function formatData(data, parentElement = document.createElement('div')) {
+            for (const key in data) {
+                if (data.hasOwnProperty(key) && key !== 'location' && key !== 'error' && key !== 'applicationType') { // Skip 'location' and 'error' keys
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'item';
+                    if (typeof data[key] === 'object' && data[key] !== null) {
+                        // If the value is an object, recurse into it
+                        itemDiv.innerHTML = `<h4>${key}:</h4>`;
+                        itemDiv.appendChild(formatData(data[key], document.createElement('div')));
+                    } else {
+                        itemDiv.innerHTML = `<h4>${key}:</h4> ${data[key]}`;
+                    }
+                    parentElement.appendChild(itemDiv);
+                }
+            }
+            return parentElement;
+        }
+
+        function addToHistory(caseNumber) {
+            let history = JSON.parse(localStorage.getItem('caseHistory')) || [];
+            if (!history.includes(caseNumber)) {
+                history.push(caseNumber);
+                localStorage.setItem('caseHistory', JSON.stringify(history));
+                updateHistorySelect(history);
+            }
+        }
+
+        function loadHistory() {
+            const history = JSON.parse(localStorage.getItem('caseHistory')) || [];
+            updateHistorySelect(history);
+        }
+
+        function updateHistorySelect(history) {
+            const select = document.getElementById('caseHistory');
+            select.innerHTML = '<option value="">Select from history</option>'; // Clear previous options
+            history.forEach(caseNumber => {
+                const option = document.createElement('option');
+                option.value = caseNumber;
+                option.textContent = caseNumber;
+                select.appendChild(option);
+            });
+        }
+
+        function selectFromHistory() {
+            const selectedCaseNumber = document.getElementById('caseHistory').value;
+            if (selectedCaseNumber) {
+                document.getElementById('caseNumber').value = selectedCaseNumber;
+            }
+        }
+    </script>
+</body>
+</html>
